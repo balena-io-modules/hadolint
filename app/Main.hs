@@ -16,14 +16,15 @@ type IgnoreRule = String
 data LintOptions = LintOptions { showVersion :: Bool
                                , ignoreRules :: [IgnoreRule]
                                , dockerfiles :: [String]
+                               , displayName :: Maybe String
                                }
 
 ignoreFilter :: [IgnoreRule] -> Check -> Bool
 ignoreFilter ignoredRules (Check (Metadata code _ _) _ _ _) = code `notElem` ignoredRules
 
-printChecks :: [Check] -> IO ()
-printChecks checks = do
-    mapM_ (putStrLn . formatCheck) $ sort checks
+printChecks :: Maybe String -> [Check] -> IO ()
+printChecks filename checks = do
+    mapM_ (putStrLn . (formatCheck filename)) $ sort checks
     if null checks then exitSuccess else die
 
 parseOptions :: Parser LintOptions
@@ -31,6 +32,7 @@ parseOptions = LintOptions
     <$> switch (long "version" <> short 'v' <> help "Show version")
     <*> many (strOption (long "ignore" <> help "Ignore rule" <> metavar "RULECODE"))
     <*> many (argument str (metavar "DOCKERFILE..."))
+    <*> optional (strOption (long "filename" <> short 'f' <> help "Filename to display"))
 
 main :: IO ()
 main = execParser opts >>= lint
@@ -45,20 +47,20 @@ parseFilename :: String -> String
 parseFilename "-" = "/dev/stdin"
 parseFilename s = s
 
-lintDockerfile :: [IgnoreRule] -> String -> IO ()
-lintDockerfile ignoreRules dockerfile = do
+lintDockerfile :: Maybe String ->[IgnoreRule] -> String -> IO ()
+lintDockerfile file ignoreRules dockerfile = do
     ast <- parseFile $ parseFilename dockerfile
-    checkAst (ignoreFilter ignoreRules) ast
+    checkAst (ignoreFilter ignoreRules) ast file
 
 lint :: LintOptions -> IO ()
-lint (LintOptions True _ _) = putStrLn "Haskell Dockerfile Linter v1.2.1" >> exitSuccess
-lint (LintOptions _ _ []) = putStrLn "Please provide a Dockerfile" >> exitSuccess
-lint (LintOptions _ ignored dfiles) = mapM_ (lintDockerfile ignored) dfiles
+lint (LintOptions True _ _ _) = putStrLn "Haskell Dockerfile Linter v1.2.1" >> exitSuccess
+lint (LintOptions _ _ [] _) = putStrLn "Please provide a Dockerfile" >> exitSuccess
+lint (LintOptions _ ignored dfiles filename) = mapM_ (lintDockerfile filename ignored) dfiles
 
-checkAst :: (Check -> Bool) -> Either ParseError Dockerfile -> IO ()
-checkAst checkFilter ast = case ast of
+checkAst :: (Check -> Bool) -> Either ParseError Dockerfile -> Maybe String -> IO ()
+checkAst checkFilter ast file = case ast of
     Left err         -> putStrLn (formatError err) >> exitSuccess
-    Right dockerfile -> printChecks $ filter checkFilter $ analyzeAll dockerfile
+    Right dockerfile -> (printChecks file) $ filter checkFilter $ analyzeAll dockerfile
 
 analyzeAll = analyze rules
 

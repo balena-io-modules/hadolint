@@ -16,8 +16,13 @@ formatError err =  posPart ++ stripNewlines msgPart
     stripNewlines = map (\c -> if c =='\n' then ' ' else c)
 
 
-formatCheck :: Check -> String
-formatCheck (Check metadata source linenumber _) = formatPos source linenumber ++ code metadata ++ " " ++ message metadata
+formatCheck :: Maybe String -> Check -> String
+formatCheck filename (Check metadata source linenumber _) = formatPos displayName linenumber ++ code metadata ++ " " ++ message metadata
+  where
+    displayName = case filename of
+                    (Just name) -> name
+                    Nothing -> source
+
 
 formatPos :: Filename -> Linenumber -> String
 formatPos source linenumber = if linenumber >= 0
